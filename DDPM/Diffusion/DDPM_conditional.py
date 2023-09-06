@@ -12,29 +12,29 @@ from torch.utils.tensorboard import SummaryWriter
 
 logging.basicConfig(format="%(asctime)s - %(levelname)s: %(message)s", level=logging.INFO, datefmt="%I:%M:%S")
 
-class diffusion:
+class Diffusion:
     def __init__(self,beta_start=1e-2,beta_end=0.02,numsteps=1000,device='cuda',image_size=(512,512)):
         self.image_size=(512,512)
         self.device=device
         self.beta_start=beta_start
         self.beta_end=beta_end
         self.numsteps=numsteps
-        self.beta=self.prepare_noise_schedule().to(device)
+        self.beta=self.create_noise_schedule().to(device)
         self.alpha=1-self.beta
         self.alpha_hat=torch.cumprod(self.alpha,dim=0)
-    def create_noise_schedule(self,beta_start,beta_end,numsteps):
-        return torch.linspace(beta_start,beta_end,steps=numsteps)
+    def create_noise_schedule(self):
+        return torch.linspace(self.beta_start,self.beta_end,steps=self.numsteps)
 
     def noise_image(self,x,t):#xt=sqrt(αt_hat)x0+sqrt(1-αt_hat)*noise
         
         x0=x
-        coffie0=torch.sqrt(self.alphat_hat[t])[:,None,None,None]
-        coffien=torch.sqrt(1-self.alphat_hat[t])
+        coffie0=torch.sqrt(self.alpha_hat[t])[:,None,None,None]
+        coffien=torch.sqrt(1-self.alpha_hat[t])[:,None,None,None]
         noise=torch.randn_like(x)     
         return coffie0*x0+coffien*noise,noise
     
     def sample_time_steps(self,n):
-        return torch.randint(low=1,high=self.numsteps,device=self.device)
+        return torch.randint(low=1,high=self.numsteps,size=(n,))
     
     def sample(self,model,n,labels,clg_scale=3):#推理过程
         logging.info(f"Sampling {n} new images")
@@ -67,9 +67,9 @@ def train(args):
         device=args.device
         dataloader=get_data(args)
         mseloss=nn.MSELoss()
-        model=UNet_conditional().to(device)
+        model=UNet_conditional(num_classes=args.num_classes).to(device)
         optimizer=optim.Adam(model.parameters(),lr=args.lr)
-        diffusion=diffusion(imgsize=args.image_size,device=device)
+        diffusion=Diffusion(image_size=args.image_size,device=device)
         logger = SummaryWriter(os.path.join("runs", args.run_name))
         l = len(dataloader)
         ema=EMA(0.995)
@@ -82,7 +82,7 @@ def train(args):
              for i,(image,labels) in enumerate(pb):
                 image=image.to(device)
                 labels=labels.to(device)
-                t=diffusion.sample_time_steps(args.n)
+                t=diffusion.sample_time_steps(image.shape[0]).to(device)
                 
                 x_t,noise=diffusion.noise_image(image,t)
                 if np.random.random()<0.1:
@@ -98,16 +98,16 @@ def train(args):
                 pb.set_postfix(MSE=loss.item())
                 logger.add_scalar("MSE", loss.item(), global_step=epoch * l + i)
             
-            if epoch % 10 == 0:
-            labels = torch.arange(10).long().to(device)
-            sampled_images = diffusion.sample(model, n=len(labels), labels=labels)
-            ema_sampled_images = diffusion.sample(ema_model, n=len(labels), labels=labels)
-            plot_images(sampled_images)
-            save_images(sampled_images, os.path.join("results", args.run_name, f"{epoch}.jpg"))
-            save_images(ema_sampled_images, os.path.join("results", args.run_name, f"{epoch}_ema.jpg"))
-            torch.save(model.state_dict(), os.path.join("models", args.run_name, f"ckpt.pt"))
-            torch.save(ema_model.state_dict(), os.path.join("models", args.run_name, f"ema_ckpt.pt"))
-            torch.save(optimizer.state_dict(), os.path.join("models", args.run_name, f"optim.pt"))
+             if epoch % 10 == 0:
+              labels = torch.arange(10).long().to(device)
+              sampled_images = diffusion.sample(model, n=len(labels), labels=labels)
+              ema_sampled_images = diffusion.sample(ema_model, n=len(labels), labels=labels)
+              plot_images(sampled_images)
+              save_images(sampled_images, os.path.join("results", args.run_name, f"{epoch}.jpg"))
+              save_images(ema_sampled_images, os.path.join("results", args.run_name, f"{epoch}_ema.jpg"))
+              torch.save(model.state_dict(), os.path.join("models", args.run_name, f"ckpt.pt"))
+              torch.save(ema_model.state_dict(), os.path.join("models", args.run_name, f"ema_ckpt.pt"))
+              torch.save(optimizer.state_dict(), os.path.join("models", args.run_name, f"optim.pt"))
 
 
 def launch():
@@ -116,10 +116,10 @@ def launch():
     args = parser.parse_args()
     args.run_name = "DDPM_conditional"
     args.epochs = 300
-    args.batch_size = 14
+    args.batch_size = 15
     args.image_size = 64
     args.num_classes = 10
-    args.dataset_path = r"C:\Users\dome\datasets\cifar10\cifar10-64\train"
+    args.dataset_path = "./cifar10/cifar10-64/train"
     args.device = "cuda"
     args.lr = 3e-4
     train(args)
@@ -127,15 +127,15 @@ def launch():
 
 if __name__ == '__main__':
     launch()
-    # device = "cuda"
-    # model = UNet_conditional(num_classes=10).to(device)
-    # ckpt = torch.load("./models/DDPM_conditional/ckpt.pt")
-    # model.load_state_dict(ckpt)
-    # diffusion = Diffusion(img_size=64, device=device)
-    # n = 8
-    # y = torch.Tensor([6] * n).long().to(device)
-    # x = diffusion.sample(model, n, y, cfg_scale=0)
-    # plot_images(x)
+    device = "cuda"
+    model = UNet_conditional(num_classes=10).to(device)
+    ckpt = torch.load("./models/DDPM_conditional/ckpt.pt")
+    model.load_state_dict(ckpt)
+    diffusion = Diffusion(image_size=64, device=device)
+    n = 8
+    y = torch.Tensor([6] * n).long().to(device)
+    x = diffusion.sample(model, n, y, cfg_scale=0)
+    plot_images(x)
 
 
 
