@@ -6,7 +6,8 @@ This model use *Cifar10 datasets*:https://www.kaggle.com/datasets/joaopauloschul
 *checkpoints*:https://www.kaggle.com/datasets/samuelngnjust/ddpm-checkpoint-ema
 
 The *structure* of network is *Unet_conditional* which is:
-"""Unet结构Input
+```python
+Unet结构Input
            |
         DoubleConv
            |
@@ -34,10 +35,13 @@ The *structure* of network is *Unet_conditional* which is:
         Up -> SelfAttention
            |
            |
-        Output"""
+        Output
+```
 
         
-Using"!python DDPM_conditional.py"to train
-
-
+Using 
+```python
+!python DDPM_conditional.py"
+```
+to train model and generate images
 
