@@ -13,8 +13,8 @@ from torch.utils.tensorboard import SummaryWriter
 logging.basicConfig(format="%(asctime)s - %(levelname)s: %(message)s", level=logging.INFO, datefmt="%I:%M:%S")
 
 class Diffusion:
-    def __init__(self,beta_start=1e-2,beta_end=0.02,numsteps=1000,device='cuda',image_size=(512,512)):
-        self.image_size=(512,512)
+    def __init__(self, numsteps=1000, beta_start=1e-4, beta_end=0.02, image_size=256, device="cuda"):
+        self.image_size=image_size
         self.device=device
         self.beta_start=beta_start
         self.beta_end=beta_end
@@ -41,16 +41,16 @@ class Diffusion:
         model.eval()#转换为评估模式
         print(f"we will sample {n}images")
         with torch.no_grad():
-            x=torch.randn((n,3,self.img_))
+            x=torch.randn((n,3,self.image_size,self.image_size)).to(self.device)
             for i in tqdm(reversed(range(1,self.numsteps)),position=0):
-                t=(torch.ones(x)*i).long().to(self.device)
+                t=(torch.ones(n)*i).long().to(self.device)
                 predicted_noise=model(x,t,labels)
                 if clg_scale>0:
                     uncon_predicted_noise=model(x,t,None)
                     predicted_noise=torch.lerp(uncon_predicted_noise,predicted_noise,clg_scale)
                 alpha=self.alpha[t][:,None,None,None]
                 alpha_hat=self.alpha_hat[t][:,None,None,None]
-                beta=self.beta[t][:None,None,None]
+                beta=self.beta[t][:,None,None,None]
                 if i>1:
                     noise=torch.randn_like(x)
                 else:
@@ -129,7 +129,7 @@ if __name__ == '__main__':
     launch()
     device = "cuda"
     model = UNet_conditional(num_classes=10).to(device)
-    ckpt = torch.load("./models/DDPM_conditional/ckpt.pt")
+    ckpt = torch.load("./models/DDPM_conditional/conditional_ckpt.pt")
     model.load_state_dict(ckpt)
     diffusion = Diffusion(image_size=64, device=device)
     n = 8
